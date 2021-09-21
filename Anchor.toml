@@ -1,5 +1,5 @@
 [programs.localnet]
-harmonia = "Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS"
+harmonia = "5urSProYo2jCcyEid4Ytv3wE8fQbQRPV3UUPj7Hmac1u"
 
 [registry]
 url = "https://anchor.projectserum.com"
@@ -9,4 +9,4 @@ cluster = "localnet"
 wallet = "~/.config/solana/localnet.json"
 
 [scripts]
-test = "mocha -t 1000000 tests/"
+test = "mocha --require ts-node/register ./tests/*.ts --timeout 300000"

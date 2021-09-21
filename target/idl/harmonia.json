@@ -1,0 +1,63 @@
+{
+  "version": "0.0.0",
+  "name": "harmonia",
+  "instructions": [
+    {
+      "name": "create",
+      "accounts": [
+        {
+          "name": "project",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "payer",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "harmonia",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Project",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "name",
+            "type": "string"
+          }
+        ]
+      }
+    }
+  ],
+  "errors": [
+    {
+      "code": 300,
+      "name": "NotEnoughSOL",
+      "msg": "Not enough SOL to create project"
+    },
+    {
+      "code": 301,
+      "name": "WrongHarmoniaWallet",
+      "msg": "Wrong harmonia wallet"
+    }
+  ]
+}
