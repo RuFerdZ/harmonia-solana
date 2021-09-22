@@ -1,8 +1,7 @@
 import {
-    Connection, Keypair, sendAndConfirmTransaction, Transaction, TransactionInstruction
+    Connection, Keypair
 } from '@solana/web3.js';
 import log from 'loglevel';
-import { MarketplaceInstruction } from '../data/model';
 import { programId } from '../check';
 
 

@@ -11,12 +11,46 @@
           "isSigner": true
         },
         {
-          "name": "payer",
+          "name": "seller",
           "isMut": true,
           "isSigner": true
         },
         {
-          "name": "harmonia",
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "offsets",
+          "type": "u64"
+        },
+        {
+          "name": "price",
+          "type": "u64"
+        },
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "buy",
+      "accounts": [
+        {
+          "name": "project",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "buyer",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "seller",
           "isMut": true,
           "isSigner": false
         },
@@ -28,8 +62,8 @@
       ],
       "args": [
         {
-          "name": "name",
-          "type": "string"
+          "name": "amount",
+          "type": "u64"
         }
       ]
     }
@@ -41,6 +75,22 @@
         "kind": "struct",
         "fields": [
           {
+            "name": "authority",
+            "type": "publicKey"
+          },
+          {
+            "name": "availableOffset",
+            "type": "u64"
+          },
+          {
+            "name": "totalOffset",
+            "type": "u64"
+          },
+          {
+            "name": "offsetPrice",
+            "type": "u64"
+          },
+          {
             "name": "name",
             "type": "string"
           }
@@ -51,13 +101,16 @@
   "errors": [
     {
       "code": 300,
-      "name": "NotEnoughSOL",
-      "msg": "Not enough SOL to create project"
+      "name": "NotEnoughOffsetAvailable",
+      "msg": "Not enough offset available"
     },
     {
       "code": 301,
-      "name": "WrongHarmoniaWallet",
-      "msg": "Wrong harmonia wallet"
+      "name": "SellerIsNotAuthority",
+      "msg": "Can only send lamports to project authority"
     }
-  ]
+  ],
+  "metadata": {
+    "address": "5urSProYo2jCcyEid4Ytv3wE8fQbQRPV3UUPj7Hmac1u"
+  }
 }
