@@ -1,6 +1,7 @@
 import * as assert from 'assert';
 import * as anchor from '@project-serum/anchor';
 import { web3 } from '@project-serum/anchor';
+import { publicKey } from '@project-serum/anchor/dist/cjs/utils';
 
 function toSOL(lamport: number) {
     return lamport / web3.LAMPORTS_PER_SOL;
@@ -22,6 +23,8 @@ describe("harmonia-test-suite", () => {
     const buyerAccount = anchor.web3.Keypair.generate();
 
     const program = anchor.workspace.Harmonia;
+    // const idl = JSON.parse(require('fs').readFileSync('./target/idl/harmonia.json', 'utf8'));
+    // const program = new anchor.Program(idl, new web3.PublicKey("HARm9wjX7iJ1eqQCckXdd1imRFXE6PsVChVdV4PbfLc"), provider) as any;
 
     console.log(`Connecting to ${provider.connection["_rpcEndpoint"]}`);
 

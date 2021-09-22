@@ -1,5 +1,8 @@
 [programs.localnet]
-harmonia = "5urSProYo2jCcyEid4Ytv3wE8fQbQRPV3UUPj7Hmac1u"
+harmonia = "HARm9wjX7iJ1eqQCckXdd1imRFXE6PsVChVdV4PbfLc"
+
+[clusters.devnet]
+harmonia = "HARm9wjX7iJ1eqQCckXdd1imRFXE6PsVChVdV4PbfLc"
 
 [registry]
 url = "https://anchor.projectserum.com"
