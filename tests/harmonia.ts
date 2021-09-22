@@ -113,4 +113,27 @@ describe("harmonia-test-suite", () => {
 
 
 
+
+    it('Not a real test. Just check some ai call', async () => {
+
+        let connection = provider.connection;
+        let programId = program.programId as web3.PublicKey;
+
+        let accounts = await connection.getProgramAccounts(programId);
+        console.log("Total accounts after test: " + accounts.length);
+        // accounts.forEach((account, idx) => {
+        //     console.log(`Account ${idx} => ${account.pubkey.toBase58()}`);
+        // });
+
+        let confirmedSignatures = await connection.getSignaturesForAddress(projectAccount.publicKey, {}, "confirmed");
+        console.log(`Total confirmed transaction on ${projectAccount.publicKey} : ${confirmedSignatures.length}`)
+        confirmedSignatures.forEach((sign, idx) => {
+            console.log(`Sign ${idx} => ${sign.signature}`);
+        });
+
+        let transaction = await connection.getTransaction(confirmedSignatures[0].signature, { commitment: "confirmed" });
+        console.log(`1rst transaction ${transaction}`);
+
+        assert.ok(true);
+    });
 });
