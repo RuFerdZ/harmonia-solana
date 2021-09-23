@@ -109,5 +109,8 @@
       "name": "SellerIsNotAuthority",
       "msg": "Can only send lamports to project authority"
     }
-  ]
+  ],
+  "metadata": {
+    "address": "HARm9wjX7iJ1eqQCckXdd1imRFXE6PsVChVdV4PbfLc"
+  }
 }
