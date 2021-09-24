@@ -17,9 +17,7 @@ use {
     std::cell::Ref,
 };
 
-
 declare_id!("CANHaiDd6HPK3ykgunmXFNZMrZ4KbZgEidY5US2L8CTw");
-
 
 const PREFIX: &str = "candy_machine";
 #[program]
@@ -32,9 +30,11 @@ pub mod candy_machine {
     use super::*;
 
     pub fn mint_nft<'info>(ctx: Context<'_, '_, '_, 'info, MintNFT<'info>>) -> ProgramResult {
+        
         let candy_machine = &mut ctx.accounts.candy_machine;
         let config = &ctx.accounts.config;
         let clock = &ctx.accounts.clock;
+        let mut localtest = false;
 
         match candy_machine.data.go_live_date {
             None => {
@@ -47,6 +47,9 @@ pub mod candy_machine {
                     if *ctx.accounts.payer.key != candy_machine.authority {
                         return Err(ErrorCode::CandyMachineNotLiveYet.into());
                     }
+                }
+                if val == 0 {
+                    localtest = true;
                 }
             }
         }
@@ -97,121 +100,126 @@ pub mod candy_machine {
             )?;
         }
 
-        let config_line = get_config_line(
-            &config.to_account_info(),
-            candy_machine.items_redeemed as usize,
-        )?;
-
         candy_machine.items_redeemed = candy_machine
             .items_redeemed
             .checked_add(1)
             .ok_or(ErrorCode::NumericalOverflowError)?;
 
-        let config_key = config.key();
-        let authority_seeds = [
-            PREFIX.as_bytes(),
-            config_key.as_ref(),
-            candy_machine.data.uuid.as_bytes(),
-            &[candy_machine.bump],
-        ];
+        // Skip metadata / masteredition call on localnet
+        // Flag localnet with go_live_date = 1 ?!??
 
-        let mut creators: Vec<spl_token_metadata::state::Creator> =
-            vec![spl_token_metadata::state::Creator {
-                address: candy_machine.key(),
-                verified: true,
-                share: 0,
-            }];
+        if !localtest {
+            let config_line = get_config_line(
+                &config.to_account_info(),
+                candy_machine.items_redeemed as usize,
+            )?;
 
-        for c in &config.data.creators {
-            creators.push(spl_token_metadata::state::Creator {
-                address: c.address,
-                verified: false,
-                share: c.share,
-            });
-        }
+            let config_key = config.key();
+            let authority_seeds = [
+                PREFIX.as_bytes(),
+                config_key.as_ref(),
+                candy_machine.data.uuid.as_bytes(),
+                &[candy_machine.bump],
+            ];
 
-        let metadata_infos = vec![
-            ctx.accounts.metadata.clone(),
-            ctx.accounts.mint.clone(),
-            ctx.accounts.mint_authority.clone(),
-            ctx.accounts.payer.clone(),
-            ctx.accounts.token_metadata_program.clone(),
-            ctx.accounts.token_program.clone(),
-            ctx.accounts.system_program.clone(),
-            ctx.accounts.rent.to_account_info().clone(),
-            candy_machine.to_account_info().clone(),
-        ];
+            let mut creators: Vec<spl_token_metadata::state::Creator> =
+                vec![spl_token_metadata::state::Creator {
+                    address: candy_machine.key(),
+                    verified: true,
+                    share: 0,
+                }];
 
-        let master_edition_infos = vec![
-            ctx.accounts.master_edition.clone(),
-            ctx.accounts.mint.clone(),
-            ctx.accounts.mint_authority.clone(),
-            ctx.accounts.payer.clone(),
-            ctx.accounts.metadata.clone(),
-            ctx.accounts.token_metadata_program.clone(),
-            ctx.accounts.token_program.clone(),
-            ctx.accounts.system_program.clone(),
-            ctx.accounts.rent.to_account_info().clone(),
-            candy_machine.to_account_info().clone(),
-        ];
+            for c in &config.data.creators {
+                creators.push(spl_token_metadata::state::Creator {
+                    address: c.address,
+                    verified: false,
+                    share: c.share,
+                });
+            }
 
-        invoke_signed(
-            &create_metadata_accounts(
-                *ctx.accounts.token_metadata_program.key,
-                *ctx.accounts.metadata.key,
-                *ctx.accounts.mint.key,
-                *ctx.accounts.mint_authority.key,
-                *ctx.accounts.payer.key,
-                candy_machine.key(),
-                config_line.name,
-                config.data.symbol.clone(),
-                config_line.uri,
-                Some(creators),
-                config.data.seller_fee_basis_points,
-                false,
-                config.data.is_mutable,
-            ),
-            metadata_infos.as_slice(),
-            &[&authority_seeds],
-        )?;
-
-        invoke_signed(
-            &create_master_edition(
-                *ctx.accounts.token_metadata_program.key,
-                *ctx.accounts.master_edition.key,
-                *ctx.accounts.mint.key,
-                candy_machine.key(),
-                *ctx.accounts.mint_authority.key,
-                *ctx.accounts.metadata.key,
-                *ctx.accounts.payer.key,
-                Some(config.data.max_supply),
-            ),
-            master_edition_infos.as_slice(),
-            &[&authority_seeds],
-        )?;
-
-        let mut new_update_authority = Some(candy_machine.authority);
-
-        if !ctx.accounts.config.data.retain_authority {
-            new_update_authority = Some(ctx.accounts.update_authority.key());
-        }
-
-        invoke_signed(
-            &update_metadata_accounts(
-                *ctx.accounts.token_metadata_program.key,
-                *ctx.accounts.metadata.key,
-                candy_machine.key(),
-                new_update_authority,
-                None,
-                Some(true),
-            ),
-            &[
-                ctx.accounts.token_metadata_program.clone(),
+            let metadata_infos = vec![
                 ctx.accounts.metadata.clone(),
+                ctx.accounts.mint.clone(),
+                ctx.accounts.mint_authority.clone(),
+                ctx.accounts.payer.clone(),
+                ctx.accounts.token_metadata_program.clone(),
+                ctx.accounts.token_program.clone(),
+                ctx.accounts.system_program.clone(),
+                ctx.accounts.rent.to_account_info().clone(),
                 candy_machine.to_account_info().clone(),
-            ],
-            &[&authority_seeds],
-        )?;
+            ];
+
+            let master_edition_infos = vec![
+                ctx.accounts.master_edition.clone(),
+                ctx.accounts.mint.clone(),
+                ctx.accounts.mint_authority.clone(),
+                ctx.accounts.payer.clone(),
+                ctx.accounts.metadata.clone(),
+                ctx.accounts.token_metadata_program.clone(),
+                ctx.accounts.token_program.clone(),
+                ctx.accounts.system_program.clone(),
+                ctx.accounts.rent.to_account_info().clone(),
+                candy_machine.to_account_info().clone(),
+            ];
+
+            invoke_signed(
+                &create_metadata_accounts(
+                    *ctx.accounts.token_metadata_program.key,
+                    *ctx.accounts.metadata.key,
+                    *ctx.accounts.mint.key,
+                    *ctx.accounts.mint_authority.key,
+                    *ctx.accounts.payer.key,
+                    candy_machine.key(),
+                    config_line.name,
+                    config.data.symbol.clone(),
+                    config_line.uri,
+                    Some(creators),
+                    config.data.seller_fee_basis_points,
+                    false,
+                    config.data.is_mutable,
+                ),
+                metadata_infos.as_slice(),
+                &[&authority_seeds],
+            )?;
+
+            invoke_signed(
+                &create_master_edition(
+                    *ctx.accounts.token_metadata_program.key,
+                    *ctx.accounts.master_edition.key,
+                    *ctx.accounts.mint.key,
+                    candy_machine.key(),
+                    *ctx.accounts.mint_authority.key,
+                    *ctx.accounts.metadata.key,
+                    *ctx.accounts.payer.key,
+                    Some(config.data.max_supply),
+                ),
+                master_edition_infos.as_slice(),
+                &[&authority_seeds],
+            )?;
+
+            let mut new_update_authority = Some(candy_machine.authority);
+
+            if !ctx.accounts.config.data.retain_authority {
+                new_update_authority = Some(ctx.accounts.update_authority.key());
+            }
+
+            invoke_signed(
+                &update_metadata_accounts(
+                    *ctx.accounts.token_metadata_program.key,
+                    *ctx.accounts.metadata.key,
+                    candy_machine.key(),
+                    new_update_authority,
+                    None,
+                    Some(true),
+                ),
+                &[
+                    ctx.accounts.token_metadata_program.clone(),
+                    ctx.accounts.metadata.clone(),
+                    candy_machine.to_account_info().clone(),
+                ],
+                &[&authority_seeds],
+            )?;
+        }
 
         Ok(())
     }
