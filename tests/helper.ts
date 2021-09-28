@@ -11,6 +11,21 @@ import {
 
 import { AccountLayout, MintLayout, Token } from '@solana/spl-token';
 
+
+export function getHarmoniaProgram(provider: anchor.Provider) {
+    const harmoniaProgram = anchor.workspace.Harmonia;
+    // const harmoniaIdl = JSON.parse(require('fs').readFileSync('./target/idl/harmonia.json', 'utf8'));
+    // const harmoniaProgram = new anchor.Program(harmoniaIdl, new web3.PublicKey("HARm9wjX7iJ1eqQCckXdd1imRFXE6PsVChVdV4PbfLc"), provider) as any;
+    return harmoniaProgram;
+}
+export function getCandyProgram(provider: anchor.Provider) {
+    // const candyProgram = anchor.workspace.CandyMachine;
+    const candyIdl = JSON.parse(require('fs').readFileSync('./target/idl/candy_machine.json', 'utf8'));
+    const candyProgram = new anchor.Program(candyIdl, new web3.PublicKey("CANHaiDd6HPK3ykgunmXFNZMrZ4KbZgEidY5US2L8CTw"), provider) as any;
+    return candyProgram;
+}
+
+
 //
 // Helper function that test account balance and request airdrop if less than 'amount'
 //
@@ -169,16 +184,16 @@ export async function getCandyMachine(config: anchor.web3.PublicKey, uuid: strin
 };
 
 
-export async function initializeCandyMachine(provider: anchor.Provider, program: anchor.Program, myWallet: web3.Keypair) {
-    const initConfig = await getInitializeConfigTx(program, myWallet, 5);
+export async function initializeCandyMachine(provider: anchor.Provider, program: anchor.Program, myWallet: web3.Keypair, items: number) {
+    const initConfig = await getInitializeConfigTx(program, myWallet, items);
     const { config } = initConfig;
 
-    const addLinesTx = await addConfigLines(program, myWallet, 5, config);
+    const addLinesTx = await addConfigLines(program, myWallet, items, config);
 
     const candyMachineUuid = anchor.web3.Keypair.generate().publicKey.toBase58().slice(0, 6);
     const [candyMachine, bump] = await getCandyMachine(config.publicKey, candyMachineUuid, program.programId);
 
-    const accountSize = configArrayStart + 4 + 5 * configLineSize + 4 + 2;
+    const accountSize = configArrayStart + 4 + items * configLineSize + 4 + 2;
     const accountLamports = await provider.connection.getMinimumBalanceForRentExemption(accountSize);
 
     await program.rpc.initializeCandyMachine(
@@ -186,7 +201,7 @@ export async function initializeCandyMachine(provider: anchor.Provider, program:
         {
             uuid: candyMachineUuid,
             price: new anchor.BN(0.05 * web3.LAMPORTS_PER_SOL),
-            itemsAvailable: new anchor.BN(5),
+            itemsAvailable: new anchor.BN(items),
             goLiveDate: null,
         },
         {
@@ -208,11 +223,6 @@ export async function initializeCandyMachine(provider: anchor.Provider, program:
                     lamports: accountLamports,
                     programId: program.programId,
                 }),
-                // anchor.web3.SystemProgram.transfer({
-                //     fromPubkey: myWallet.publicKey,
-                //     toPubkey: authority.publicKey,
-                //     lamports: 5,
-                // }),
                 initConfig.tx, // initializeConfig
                 addLinesTx, // addConfigLines
             ],
@@ -235,7 +245,7 @@ const TOKEN_PROGRAM_ID = new PublicKey(
 const SPL_ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ID = new PublicKey(
     "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
 );
-const TOKEN_METADATA_PROGRAM_ID = new PublicKey(
+export const TOKEN_METADATA_PROGRAM_ID = new PublicKey(
     "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"
 );
 
@@ -346,6 +356,7 @@ export async function updateCandyMachine(program: anchor.Program, candyMachineAd
                 candyMachine: candyMachineAddress,
                 authority: myWallet.publicKey,
             },
+            signers: [myWallet],
         },
     );
     return tx;

@@ -17,3 +17,4 @@ default = []
 [dependencies]
 anchor-lang = "0.16.0"
 anchor-spl = "0.16.0"
+candy-machine = { path = "../candy-machine", features = ["cpi"] }

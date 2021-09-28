@@ -1,7 +1,7 @@
 import * as assert from 'assert';
 import * as anchor from '@project-serum/anchor';
 import { web3 } from '@project-serum/anchor';
-import { ensureBalance } from './helper';
+import { ensureBalance, getHarmoniaProgram } from './helper';
 
 function toSOL(lamport: number) {
     return lamport / web3.LAMPORTS_PER_SOL;
@@ -19,14 +19,11 @@ describe("harmonia-test-suite", () => {
     const projectAccount = anchor.web3.Keypair.generate();
     const buyerAccount = anchor.web3.Keypair.generate();
 
-    const program = anchor.workspace.Harmonia;
-    // const idl = JSON.parse(require('fs').readFileSync('./target/idl/harmonia.json', 'utf8'));
-    // const program = new anchor.Program(idl, new web3.PublicKey("HARm9wjX7iJ1eqQCckXdd1imRFXE6PsVChVdV4PbfLc"), provider) as any;
+    const program = getHarmoniaProgram(provider);
 
     console.log(`Connecting to ${provider.connection["_rpcEndpoint"]}`);
 
-
-    it('Print info', async () => {
+    before('Print info', async () => {
         const harmoniaBalance = await ensureBalance(provider, provider.wallet.publicKey, 5);
         let sellerWallet = await ensureBalance(provider, sellerAccount.publicKey, 5);
         let buyerWallet = await ensureBalance(provider, buyerAccount.publicKey, 5);
@@ -101,19 +98,19 @@ describe("harmonia-test-suite", () => {
         let programId = program.programId as web3.PublicKey;
 
         let accounts = await connection.getProgramAccounts(programId);
-        console.log("Total accounts after test: " + accounts.length);
+        // console.log("Total accounts after test: " + accounts.length);
         // accounts.forEach((account, idx) => {
         //     console.log(`Account ${idx} => ${account.pubkey.toBase58()}`);
         // });
 
         let confirmedSignatures = await connection.getSignaturesForAddress(projectAccount.publicKey, {}, "confirmed");
-        console.log(`Total confirmed transaction on ${projectAccount.publicKey} : ${confirmedSignatures.length}`)
+        // console.log(`Total confirmed transaction on ${projectAccount.publicKey} : ${confirmedSignatures.length}`)
         confirmedSignatures.forEach((sign, idx) => {
-            console.log(`Sign ${idx} => ${sign.signature}`);
+            // console.log(`Sign ${idx} => ${sign.signature}`);
         });
 
         let transaction = await connection.getTransaction(confirmedSignatures[0].signature, { commitment: "confirmed" });
-        console.log(`1rst transaction ${transaction}`);
+        // console.log(`1rst transaction ${transaction}`);
 
         assert.ok(true);
     });

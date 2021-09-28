@@ -7,7 +7,8 @@ use {
         Discriminator, Key,
     },
     arrayref::array_ref,
-    spl_token::state::{Account, Mint},
+    spl_associated_token_account,
+    spl_token::state::Mint,
     spl_token_metadata::{
         instruction::{create_master_edition, create_metadata_accounts, update_metadata_accounts},
         state::{
@@ -19,18 +20,19 @@ use {
 
 declare_id!("CANHaiDd6HPK3ykgunmXFNZMrZ4KbZgEidY5US2L8CTw");
 
-const PREFIX: &str = "candy_machine";
+pub const PREFIX: &str = "candy_machine";
+
 #[program]
 pub mod candy_machine {
     use anchor_lang::solana_program::{
         program::{invoke, invoke_signed},
+        program_pack::Pack,
         system_instruction,
     };
 
     use super::*;
 
     pub fn mint_nft<'info>(ctx: Context<'_, '_, '_, 'info, MintNFT<'info>>) -> ProgramResult {
-        
         let candy_machine = &mut ctx.accounts.candy_machine;
         let config = &ctx.accounts.config;
         let clock = &ctx.accounts.clock;
@@ -61,7 +63,7 @@ pub mod candy_machine {
         if let Some(mint) = candy_machine.token_mint {
             let token_account_info = &ctx.remaining_accounts[0];
             let transfer_authority_info = &ctx.remaining_accounts[1];
-            let token_account: Account = assert_initialized(&token_account_info)?;
+            let token_account: spl_token::state::Account = assert_initialized(&token_account_info)?;
 
             assert_owned_by(&token_account_info, &spl_token::id())?;
 
@@ -242,6 +244,275 @@ pub mod candy_machine {
         Ok(())
     }
 
+    pub fn mint_one<'info>(ctx: Context<'_, '_, '_, 'info, MintOne<'info>>) -> ProgramResult {
+        let candy_machine = &mut ctx.accounts.candy_machine;
+        let config = &ctx.accounts.config;
+        let clock = &ctx.accounts.clock;
+        let rent = &ctx.accounts.rent;
+        let mut localtest = false;
+
+        msg!("========> Create Mint account <========");
+        invoke(
+            &system_instruction::create_account(
+                ctx.accounts.payer.key,
+                ctx.accounts.mint.key,
+                rent.minimum_balance(Mint::LEN),
+                Mint::LEN as u64,
+                &spl_token::id(),
+            ),
+            &[ctx.accounts.payer.clone(), ctx.accounts.mint.clone()],
+        )?;
+
+        msg!("========> Initialize Mint <========");
+        invoke(
+            &spl_token::instruction::initialize_mint(
+                &spl_token::id(),
+                ctx.accounts.mint.key,
+                ctx.accounts.payer.key,
+                Some(ctx.accounts.payer.key),
+                0,
+            )?,
+            &[
+                ctx.accounts.token_program.clone(),
+                ctx.accounts.mint.clone(),
+                ctx.accounts.rent.to_account_info(),
+            ],
+        )?;
+
+        msg!("========> Create associated token <========");
+        invoke(
+            &spl_associated_token_account::create_associated_token_account(
+                &ctx.accounts.payer.key,
+                &ctx.accounts.payer.key,
+                &ctx.accounts.mint.key,
+            ),
+            &[
+                ctx.accounts.payer.clone(),
+                ctx.accounts.associated_token.clone(),
+                ctx.accounts.payer.clone(),
+                ctx.accounts.mint.clone(),
+                ctx.accounts.system_program.clone(),
+                ctx.accounts.token_program.clone(),
+                ctx.accounts.rent.to_account_info(),
+                ctx.accounts.ata_program.to_account_info(),
+            ],
+        )?;
+
+        invoke(
+            &spl_token::instruction::mint_to(
+                &spl_token::id(),
+                &ctx.accounts.mint.key,
+                &ctx.accounts.associated_token.key,
+                &ctx.accounts.payer.key,
+                &[],
+                1,
+            )?,
+            &[
+                ctx.accounts.mint.clone(),
+                ctx.accounts.associated_token.clone(),
+                ctx.accounts.payer.clone()
+            ],
+        )?;
+
+
+        match candy_machine.data.go_live_date {
+            None => {
+                if *ctx.accounts.payer.key != candy_machine.authority {
+                    return Err(ErrorCode::CandyMachineNotLiveYet.into());
+                }
+            }
+            Some(val) => {
+                if clock.unix_timestamp < val {
+                    if *ctx.accounts.payer.key != candy_machine.authority {
+                        return Err(ErrorCode::CandyMachineNotLiveYet.into());
+                    }
+                }
+                if val == 0 {
+                    localtest = true;
+                }
+            }
+        }
+
+        if candy_machine.items_redeemed >= candy_machine.data.items_available {
+            return Err(ErrorCode::CandyMachineEmpty.into());
+        }
+
+        if let Some(mint) = candy_machine.token_mint {
+            let token_account_info = &ctx.remaining_accounts[0];
+            let transfer_authority_info = &ctx.remaining_accounts[1];
+            let token_account: spl_token::state::Account = assert_initialized(&token_account_info)?;
+
+            assert_owned_by(&token_account_info, &spl_token::id())?;
+
+            if token_account.mint != mint {
+                return Err(ErrorCode::MintMismatch.into());
+            }
+
+            if token_account.amount < candy_machine.data.price {
+                return Err(ErrorCode::NotEnoughTokens.into());
+            }
+
+            spl_token_transfer(TokenTransferParams {
+                source: token_account_info.clone(),
+                destination: ctx.accounts.wallet.clone(),
+                authority: transfer_authority_info.clone(),
+                authority_signer_seeds: &[],
+                token_program: ctx.accounts.token_program.clone(),
+                amount: candy_machine.data.price,
+            })?;
+        } else {
+            if ctx.accounts.payer.lamports() < candy_machine.data.price {
+                return Err(ErrorCode::NotEnoughSOL.into());
+            }
+
+            invoke(
+                &system_instruction::transfer(
+                    &ctx.accounts.payer.key,
+                    ctx.accounts.wallet.key,
+                    candy_machine.data.price,
+                ),
+                &[
+                    ctx.accounts.payer.clone(),
+                    ctx.accounts.wallet.clone(),
+                    ctx.accounts.system_program.clone(),
+                ],
+            )?;
+        }
+
+        candy_machine.items_redeemed = candy_machine
+            .items_redeemed
+            .checked_add(1)
+            .ok_or(ErrorCode::NumericalOverflowError)?;
+
+        // Skip metadata / masteredition call on localnet
+        // Flag localnet with go_live_date = 1 ?!??
+        if !localtest {
+            let config_line = get_config_line(
+                &config.to_account_info(),
+                candy_machine.items_redeemed as usize,
+            )?;
+
+            let config_key = config.key();
+            let authority_seeds = [
+                PREFIX.as_bytes(),
+                config_key.as_ref(),
+                candy_machine.data.uuid.as_bytes(),
+                &[candy_machine.bump],
+            ];
+
+            let mut creators: Vec<spl_token_metadata::state::Creator> =
+                vec![spl_token_metadata::state::Creator {
+                    address: candy_machine.key(),
+                    verified: true,
+                    share: 0,
+                }];
+
+            for c in &config.data.creators {
+                creators.push(spl_token_metadata::state::Creator {
+                    address: c.address,
+                    verified: false,
+                    share: c.share,
+                });
+            }
+
+            let metadata_infos = vec![
+                ctx.accounts.metadata.clone(),
+                ctx.accounts.mint.clone(),
+                ctx.accounts.payer.clone(),
+                ctx.accounts.payer.clone(),
+                ctx.accounts.token_metadata_program.clone(),
+                ctx.accounts.token_program.clone(),
+                ctx.accounts.system_program.clone(),
+                ctx.accounts.rent.to_account_info().clone(),
+                candy_machine.to_account_info().clone(),
+            ];
+
+            let master_edition_infos = vec![
+                ctx.accounts.master_edition.clone(),
+                ctx.accounts.mint.clone(),
+                ctx.accounts.payer.clone(),
+                ctx.accounts.payer.clone(),
+                ctx.accounts.metadata.clone(),
+                ctx.accounts.token_metadata_program.clone(),
+                ctx.accounts.token_program.clone(),
+                ctx.accounts.system_program.clone(),
+                ctx.accounts.rent.to_account_info().clone(),
+                candy_machine.to_account_info().clone(),
+            ];
+
+            invoke_signed(
+                &create_metadata_accounts(
+                    *ctx.accounts.token_metadata_program.key,
+                    *ctx.accounts.metadata.key,
+                    *ctx.accounts.mint.key,
+                    *ctx.accounts.payer.key,
+                    *ctx.accounts.payer.key,
+                    candy_machine.key(),
+                    config_line.name,
+                    config.data.symbol.clone(),
+                    config_line.uri,
+                    Some(creators),
+                    config.data.seller_fee_basis_points,
+                    false,
+                    config.data.is_mutable,
+                ),
+                metadata_infos.as_slice(),
+                &[&authority_seeds],
+            )?;
+
+            invoke_signed(
+                &create_master_edition(
+                    *ctx.accounts.token_metadata_program.key,
+                    *ctx.accounts.master_edition.key,
+                    *ctx.accounts.mint.key,
+                    candy_machine.key(),
+                    *ctx.accounts.payer.key,
+                    *ctx.accounts.metadata.key,
+                    *ctx.accounts.payer.key,
+                    Some(config.data.max_supply),
+                ),
+                master_edition_infos.as_slice(),
+                &[&authority_seeds],
+            )?;
+
+            let mut new_update_authority = Some(candy_machine.authority);
+
+            if !ctx.accounts.config.data.retain_authority {
+                new_update_authority = Some(ctx.accounts.payer.key());
+            }
+
+            invoke_signed(
+                &update_metadata_accounts(
+                    *ctx.accounts.token_metadata_program.key,
+                    *ctx.accounts.metadata.key,
+                    candy_machine.key(),
+                    new_update_authority,
+                    None,
+                    Some(true),
+                ),
+                &[
+                    ctx.accounts.token_metadata_program.clone(),
+                    ctx.accounts.metadata.clone(),
+                    candy_machine.to_account_info().clone(),
+                ],
+                &[&authority_seeds],
+            )?;
+        }
+
+        Ok(())
+    }
+
+    pub fn ping(ctx: Context<Ping>, test: u8) -> ProgramResult {
+        let candy_machine = &ctx.accounts.candy_machine;
+        msg!(
+            "Ping candy_machine {}. Test {}",
+            candy_machine.data.uuid,
+            test
+        );
+
+        Ok(())
+    }
+
     pub fn initialize_config(ctx: Context<InitializeConfig>, data: ConfigData) -> ProgramResult {
         let config_info = &mut ctx.accounts.config;
         if data.uuid.len() != 6 {
@@ -351,17 +622,17 @@ pub mod candy_machine {
 
             let old_value_in_vec = data[my_position_in_vec];
             data[my_position_in_vec] = data[my_position_in_vec] | mask;
-            msg!(
-                "My position in vec is {} my mask is going to be {}, the old value is {}",
-                position,
-                mask,
-                old_value_in_vec
-            );
-            msg!(
-                "My new value is {} and my position from right is {}",
-                data[my_position_in_vec],
-                position_from_right
-            );
+            // msg!(
+            //     "My position in vec is {} my mask is going to be {}, the old value is {}",
+            //     position,
+            //     mask,
+            //     old_value_in_vec
+            // );
+            // msg!(
+            //     "My new value is {} and my position from right is {}",
+            //     data[my_position_in_vec],
+            //     position_from_right
+            // );
             if old_value_in_vec != data[my_position_in_vec] {
                 msg!("Increasing count");
                 new_count = new_count
@@ -395,7 +666,8 @@ pub mod candy_machine {
         if ctx.remaining_accounts.len() > 0 {
             let token_mint_info = &ctx.remaining_accounts[0];
             let _token_mint: Mint = assert_initialized(&token_mint_info)?;
-            let token_account: Account = assert_initialized(&ctx.accounts.wallet)?;
+            let token_account: spl_token::state::Account =
+                assert_initialized(&ctx.accounts.wallet)?;
 
             assert_owned_by(&token_mint_info, &spl_token::id())?;
             assert_owned_by(&ctx.accounts.wallet, &spl_token::id())?;
@@ -508,6 +780,49 @@ pub struct UpdateCandyMachine<'info> {
     candy_machine: ProgramAccount<'info, CandyMachine>,
     #[account(signer)]
     authority: AccountInfo<'info>,
+}
+
+#[derive(Accounts)]
+pub struct MintOne<'info> {
+    config: ProgramAccount<'info, Config>,
+    #[account(
+        mut,
+        has_one = config,
+        has_one = wallet,
+        seeds = [PREFIX.as_bytes(), config.key().as_ref(), candy_machine.data.uuid.as_bytes()],
+        bump = candy_machine.bump,
+    )]
+    candy_machine: ProgramAccount<'info, CandyMachine>,
+    #[account(mut, signer)]
+    payer: AccountInfo<'info>,
+    #[account(mut)]
+    wallet: AccountInfo<'info>,
+    #[account(mut)]
+    associated_token: AccountInfo<'info>,
+    #[account(mut)]
+    metadata: AccountInfo<'info>,
+    #[account(mut, signer)]
+    mint: AccountInfo<'info>,
+    #[account(mut)]
+    master_edition: AccountInfo<'info>,
+    #[account(address = spl_token_metadata::id())]
+    token_metadata_program: AccountInfo<'info>,
+    #[account(address = spl_associated_token_account::id())]
+    ata_program: AccountInfo<'info>,
+    #[account(address = spl_token::id())]
+    token_program: AccountInfo<'info>,
+    #[account(address = system_program::ID)]
+    system_program: AccountInfo<'info>,
+    rent: Sysvar<'info, Rent>,
+    clock: Sysvar<'info, Clock>,
+}
+
+#[derive(Accounts)]
+pub struct Ping<'info> {
+    #[account()]
+    pub candy_machine: ProgramAccount<'info, CandyMachine>,
+    // #[account(signer)]
+    // pub authority: AccountInfo<'info>,
 }
 
 #[account]

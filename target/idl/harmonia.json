@@ -66,6 +66,52 @@
           "type": "u64"
         }
       ]
+    },
+    {
+      "name": "buyAndMint",
+      "accounts": [
+        {
+          "name": "project",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "buyer",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "seller",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "candyProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "config",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "candyMachine",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
     }
   ],
   "accounts": [
@@ -109,8 +155,5 @@
       "name": "SellerIsNotAuthority",
       "msg": "Can only send lamports to project authority"
     }
-  ],
-  "metadata": {
-    "address": "HARm9wjX7iJ1eqQCckXdd1imRFXE6PsVChVdV4PbfLc"
-  }
+  ]
 }

@@ -5,11 +5,51 @@ use anchor_lang::solana_program::{
     program_error::ProgramError, pubkey::Pubkey, system_instruction, system_program,
     sysvar::Sysvar,
 };
+use candy_machine::{CandyMachine, Config};
+
+// use candy_machine::program;
+// use candy_machine::{};
 
 declare_id!("HARm9wjX7iJ1eqQCckXdd1imRFXE6PsVChVdV4PbfLc");
 
+pub struct BuyData<'info> {
+    pub buyer: AccountInfo<'info>,
+    pub seller: AccountInfo<'info>,
+    system_program: AccountInfo<'info>,
+}
+
+pub fn buy_offset(project: &mut Account<Project>, amount: u64, data: &BuyData) -> ProgramResult {
+    msg!("Buying {} offsets", amount);
+    if amount > project.available_offset {
+        return Err(ErrorCode::NotEnoughOffsetAvailable.into());
+    }
+
+    if project.authority != *data.seller.key {
+        return Err(ErrorCode::SellerIsNotAuthority.into());
+    }
+
+    // transfer lamports
+    let cost = project.offset_price * amount;
+    msg!("Transfering {} lamports to seller", cost);
+    invoke(
+        &system_instruction::transfer(&data.buyer.key, &data.seller.key, cost),
+        &[
+            data.buyer.clone(),
+            data.seller.clone(),
+            data.system_program.clone(),
+        ],
+    )?;
+
+    // consume offsets
+    project.available_offset = project.available_offset - amount;
+
+    Ok(())
+}
+
 #[program]
 pub mod harmonia {
+
+    use candy_machine::Ping;
 
     use super::*;
 
@@ -26,32 +66,41 @@ pub mod harmonia {
     }
 
     pub fn buy(ctx: Context<Buy>, amount: u64) -> ProgramResult {
-        msg!("Buying {} offsets", amount);
+        msg!("Direct buying {} offsets", amount);
 
-        let project = &mut ctx.accounts.project;
+        let buy_data = BuyData {
+            buyer: ctx.accounts.buyer.clone(),
+            seller: ctx.accounts.seller.clone(),
+            system_program: ctx.accounts.system_program.clone(),
+        };
 
-        if amount > project.available_offset {
-            return Err(ErrorCode::NotEnoughOffsetAvailable.into());
-        }
+        buy_offset(&mut ctx.accounts.project, amount, &buy_data)?;
 
-        if project.authority != *ctx.accounts.seller.key {
-            return Err(ErrorCode::SellerIsNotAuthority.into());
-        }
+        Ok(())
+    }
 
-        // transfer lamports
-        let cost = project.offset_price * amount;
-        msg!("Transfering {} lamports to seller", cost);
-        invoke(
-            &system_instruction::transfer(&ctx.accounts.buyer.key, &ctx.accounts.seller.key, cost),
-            &[
-                ctx.accounts.buyer.clone(),
-                ctx.accounts.seller.clone(),
-                ctx.accounts.system_program.clone(),
-            ],
-        )?;
+    pub fn buy_and_mint(ctx: Context<BuyAndMintNFT>, amount: u64) -> ProgramResult {
+        msg!("Buying {} and mint 1", amount);
 
-        // consume offsets
-        project.available_offset = project.available_offset - amount;
+        let buy_data = BuyData {
+            buyer: ctx.accounts.buyer.clone(),
+            seller: ctx.accounts.seller.clone(),
+            system_program: ctx.accounts.system_program.clone(),
+        };
+
+        buy_offset(&mut ctx.accounts.project, amount, &buy_data)?;
+
+        msg!("Ready to ping");
+        let cpi_program = ctx.accounts.candy_program.to_account_info();
+        let cpi_accounts = Ping {
+            candy_machine: ProgramAccount::try_from(cpi_program.key, &ctx.accounts.candy_machine).unwrap(),
+            //candy_machine: ctx.accounts.candy_machine.try_from(),
+            // authority: ctx.accounts.seller.clone(),
+        };
+        let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
+        candy_machine::cpi::ping(cpi_ctx, 2)?;
+
+        msg!("==== end ping");
 
         Ok(())
     }
@@ -77,6 +126,55 @@ pub struct Buy<'info> {
     pub seller: AccountInfo<'info>,
     #[account(address = system_program::ID)]
     system_program: AccountInfo<'info>,
+}
+
+#[derive(Accounts)]
+pub struct BuyAndMintNFT<'info> {
+    #[account(mut)]
+    pub project: Account<'info, Project>,
+    #[account(mut, signer)]
+    pub buyer: AccountInfo<'info>,
+    #[account(mut)]
+    pub seller: AccountInfo<'info>,
+    #[account(address = system_program::ID)]
+    system_program: AccountInfo<'info>,
+
+    #[account(executable)]
+    pub candy_program: AccountInfo<'info>,
+    #[account()]
+    pub config: AccountInfo<'info>,
+    // #[account(
+    //     mut,
+    //     has_one = config,
+    //     has_one = wallet,
+    //     seeds = [PREFIX.as_bytes(), config.key().as_ref(), candy_machine.data.uuid.as_bytes()],
+    //     bump = candy_machine.bump,
+    // )]
+    // #[account(mut, seeds = [candy_machine::PREFIX.as_bytes(), config.key().as_ref(), candy_machine.data.uuid.as_bytes()], bump = candy_machine.bump,)]
+    #[account()]
+    pub candy_machine: AccountInfo<'info>,
+    // #[account(mut, signer)]
+    // payer: AccountInfo<'info>,
+    // #[account(mut)]
+    // wallet: AccountInfo<'info>,
+    // #[account(mut)]
+    // metadata: AccountInfo<'info>,
+    // #[account(mut)]
+    // mint: AccountInfo<'info>,
+    // #[account(signer)]
+    // mint_authority: AccountInfo<'info>,
+    // #[account(signer)]
+    // update_authority: AccountInfo<'info>,
+    // #[account(mut)]
+    // master_edition: AccountInfo<'info>,
+    // #[account(address = spl_token_metadata::id())]
+    // token_metadata_program: AccountInfo<'info>,
+    // #[account(address = spl_token::id())]
+    // token_program: AccountInfo<'info>,
+    // #[account(address = system_program::ID)]
+    // system_program: AccountInfo<'info>,
+    // rent: Sysvar<'info, Rent>,
+    // clock: Sysvar<'info, Clock>,
 }
 
 #[account]
