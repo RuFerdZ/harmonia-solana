@@ -18,3 +18,6 @@ default = []
 anchor-lang = "0.16.0"
 anchor-spl = "0.16.0"
 candy-machine = { path = "../candy-machine", features = ["cpi"] }
+spl-token = { version="3.1.1", features = [ "no-entrypoint" ] }
+spl-associated-token-account = { version="1.0.1", features = [ "no-entrypoint" ] }
+spl-token-metadata = { version="0.0.1", features = [ "no-entrypoint" ] }

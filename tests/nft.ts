@@ -1,7 +1,10 @@
 import * as assert from 'assert';
 import * as anchor from '@project-serum/anchor';
 import { web3 } from '@project-serum/anchor';
-import { ensureBalance, getCandyMachine, getCandyProgram, getHarmoniaProgram, initializeCandyMachine, mintNft, updateCandyMachine } from './helper';
+import { ensureBalance, getCandyMachine, getCandyProgram, getHarmoniaProgram, getMasterEditionAddress, getMetadataAddress, getOwnedTokenAccounts, getTokenWalletAddress, initializeCandyMachine, mintNft, TOKEN_METADATA_PROGRAM_ID, updateCandyMachine } from './helper';
+import { ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { program } from 'commander';
+import { SystemProgram } from '@solana/web3.js'
 
 function toSOL(lamport: number) {
     return lamport / web3.LAMPORTS_PER_SOL;
@@ -98,27 +101,60 @@ describe("nft-test-suite", () => {
 
     it('Buy and mint', async () => {
 
+        // const [candyMachine, bump] = await getCandyMachine(config.publicKey, candyMachineUuid, candyProgramId);
+        // const tx = await harmoniaProgram.rpc.buyAndMint(new anchor.BN(150), {
+        //     accounts: {
+        //         project: projectAccount.publicKey,
+        //         buyer: buyerAccount.publicKey,
+        //         seller: sellerAccount.publicKey,
+        //         systemProgram: anchor.web3.SystemProgram.programId,
+        //         candyProgram: candyProgram.programId,
+        //         config: config.publicKey,
+        //         candyMachine: candyMachine,
+        //     },
+        //     signers: [buyerAccount],
+        // });
+        
         const [candyMachine, bump] = await getCandyMachine(config.publicKey, candyMachineUuid, candyProgramId);
+        machineState = await candyProgram.account.candyMachine.fetch(candyMachine);
+        assert.ok(machineState.itemsRedeemed.eq(new anchor.BN(1)));
 
-        console.log("fire!!!!");
+        const mint = anchor.web3.Keypair.generate();
+        const token = await getTokenWalletAddress(buyerAccount.publicKey, mint.publicKey);
+        const metadata = await getMetadataAddress(mint.publicKey);
+        const masterEdition = await getMasterEditionAddress(mint.publicKey);
 
-        const tx = await harmoniaProgram.rpc.buyAndMint(new anchor.BN(150), {
+        const tx = await harmoniaProgram.rpc.buyAndMint(new anchor.BN(10), {
             accounts: {
                 project: projectAccount.publicKey,
                 buyer: buyerAccount.publicKey,
                 seller: sellerAccount.publicKey,
-                systemProgram: anchor.web3.SystemProgram.programId,
                 candyProgram: candyProgram.programId,
+
                 config: config.publicKey,
                 candyMachine: candyMachine,
+                payer: buyerAccount.publicKey,
+                wallet: sellerAccount.publicKey, // treasury
+                mint: mint.publicKey,
+                associatedToken: token,
+                metadata: metadata,
+                masterEdition: masterEdition,
+                tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
+                ataProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+                tokenProgram: TOKEN_PROGRAM_ID,
+                systemProgram: SystemProgram.programId,
+                rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+                clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
             },
-            signers: [buyerAccount],
+            signers: [mint, buyerAccount],
         });
 
-        // Fetch the project from the cluster.
-        const account = await harmoniaProgram.account.project.fetch(projectAccount.publicKey);
-        assert.equal(account.availableOffset.toNumber(), (500 - 10 - 150));
-        assert.equal(account.totalOffset.toNumber(), 500);
+        machineState = await candyProgram.account.candyMachine.fetch(candyMachine);
+        assert.ok(machineState.itemsRedeemed.eq(new anchor.BN(2)));
+
+        let tokens = await getOwnedTokenAccounts(provider.connection, buyerAccount.publicKey);
+        assert.equal(tokens.length, 2);
+        assert.equal(mint.publicKey.toBase58(), tokens[1].accountInfo.mint);
 
     });
 
