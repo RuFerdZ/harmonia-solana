@@ -98,19 +98,36 @@ describe("harmonia-test-suite", () => {
         let programId = program.programId as web3.PublicKey;
 
         let accounts = await connection.getProgramAccounts(programId);
-        // console.log("Total accounts after test: " + accounts.length);
-        // accounts.forEach((account, idx) => {
-        //     console.log(`Account ${idx} => ${account.pubkey.toBase58()}`);
-        // });
+        console.log("Total accounts after test: " + accounts.length);
+        accounts.forEach((account, idx) => {
+            console.log(`Account ${idx} => ${account.pubkey.toBase58()}`);
+        });
 
+        let signatures : Array<string> = [];
         let confirmedSignatures = await connection.getSignaturesForAddress(projectAccount.publicKey, {}, "confirmed");
-        // console.log(`Total confirmed transaction on ${projectAccount.publicKey} : ${confirmedSignatures.length}`)
+        console.log(`Total confirmed transaction on ${projectAccount.publicKey} : ${confirmedSignatures.length}`)
         confirmedSignatures.forEach((sign, idx) => {
-            // console.log(`Sign ${idx} => ${sign.signature}`);
+            signatures.push(sign.signature);
+            console.log(`Sign ${idx} => ${sign.signature}`);
         });
 
         let transaction = await connection.getTransaction(confirmedSignatures[0].signature, { commitment: "confirmed" });
-        // console.log(`1rst transaction ${transaction}`);
+        console.log(`1rst transaction ${transaction}`);
+
+        let instructionCoder = (program as anchor.Program).coder.instruction;
+        let transactions = await connection.getParsedConfirmedTransactions(signatures, "confirmed");
+        transactions.forEach((tx, idx) => {
+            console.log(`Tx ${idx}`);
+            tx.transaction.message.instructions.forEach((instruction : web3.PartiallyDecodedInstruction) => {
+                let decoded = instructionCoder.decode(instruction.data, "base58");
+                let data = decoded.data as any;
+                if(decoded.name == "buy") {
+                    console.log(`buy ${data.amount.toString()}`);
+                } else {
+                    console.log(`${decoded.name}`);
+                }
+            });
+        });
 
         assert.ok(true);
     });
